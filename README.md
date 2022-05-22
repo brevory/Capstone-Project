@@ -1,4 +1,4 @@
-Knowledge Scrape is a technoogy built to make students lives easier.
+Knowledge Scrape is a technology built to make students lives easier.
 Knowledge Scrape is designed to pull in information
 on acadmeic research and researchers through various apis and
 the results of a user's search can be
