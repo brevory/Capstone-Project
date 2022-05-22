@@ -13,6 +13,7 @@ an article via the Beautiful Soup parser
 To begin all you need to do is download or clone this repository navigate 
 to the applications directory in your powershell if needed and enter the following 
 commands
+
 $env:FLASK_APP = "app"
 
 flask run
