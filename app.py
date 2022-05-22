@@ -89,7 +89,6 @@ def index():
             if (i % 10 == 0):
                 pageBuilder = pageBuilder + '<li class="page-item"><a class="page-link" href="javascript:;" onclick="showPage(' + str(pageCounter) + ')">' + str(pageCounter) + '</a></li>'
                 pageCounter = pageCounter + 1
-                
         if pageCounter == 1:
             pageBuilder = ""
 
@@ -113,9 +112,8 @@ def researcher_search():
 
         i = 0
 
-        #api request
+        #api request for researchers
         r = requests.get("https://pub.orcid.org/v3.0/expanded-search/", params={"q":search,"rows":"100"}, headers={"Accept":"application/json"})
-
 
         data = json.loads(r.content)
         for researcher in data['expanded-result']:
@@ -123,39 +121,53 @@ def researcher_search():
             #if statement is needed because not all researchers are active and some appraently don't have name in the orcid database
             if (researcher['institution-name'] and researcher['given-names'] and researcher['family-names'] ):
                 fullName = researcher['given-names'] + " " + researcher['family-names']
+
+                #querybuilder build the href route that will lead to the individual researchers page
                 queryBuilder = "researchers?name=" + fullName + "&institution-name=" + researcher['institution-name'][0] + "&orcid-id=" + researcher['orcid-id']
+
+                #html string for the cumulative results of the search to be displayed to the user
                 resultBuilder = (resultBuilder + '<div class="card' + " page" + str(pageCounter) + '" style="width: 70%;"><div class="card-body"><h5 class="card-title"><a href="' + 
                 queryBuilder + '" target="_blank">' + fullName + '</a></h5><h6 class="card-subtitle mb-2 text-muted">' + researcher['institution-name'][0] + '</h6></div></div>')
+
                 i = i + 1
                 if (i % 10 == 0):
                     pageBuilder = pageBuilder + '<li class="page-item"><a class="page-link" href="javascript:;" onclick="showPage(' + str(pageCounter) + ')">' + str(pageCounter) + '</a></li>'
                     pageCounter = pageCounter + 1
                 if pageCounter == 1:
                     pageBuilder = ""
+        
+        #load researchers results page
         return render_template ("researcher-results.html", search=request.form['search'], results=resultBuilder, pages=pageBuilder, maxPageNumber=pageCounter)
+
     else:
         return render_template ("index.html")
 
-
+#route that filter data will be submitted
 @app.route("/filter", methods= ['POST', 'GET'])
 def filter():
     if request.method == "POST":
         global searchResults
         list_results = list(searchResults.results())
+
         #the comment variable of an result will say if the article is in a foregin language in the same sentence as other information
         Spanish = 'in Spanish'
         French = 'in French'
+
         frenchlist = list(searchResults.results())
         spanishlist = list(searchResults.results())
         filtered_results = list(searchResults.results())
         frenchlist.clear()
         spanishlist.clear()
         filtered_results.clear()
+
+        #populates the french and spanish lists
         for result in list_results:
                 if result.comment != None and French in result.comment:
                     frenchlist.append(result)
                 if result.comment != None and Spanish in result.comment:
                     spanishlist.append(result)
+        
+        #English filter is selected
         if request.form.get('English') == "one":
             for result in list_results:
                 if result.comment != None and French in result.comment:
@@ -163,20 +175,32 @@ def filter():
                 if result.comment != None and Spanish in result.comment:
                     continue
                 filtered_results.append(result)
+        
+        #Spanish filter is selected
         if request.form.get('Spanish') == "one":
             filtered_results = filtered_results + spanishlist
+
+        #French filter is selected
         if request.form.get('French') == "one":
             filtered_results = filtered_results + frenchlist
+
+        #No language filter selected
         if (request.form.get('English') is None) and (request.form.get('Spanish') is None) and (request.form.get('French') is None):
             filtered_results=list(searchResults.results())
+        
+        #Date filter is selected
         if request.form.get('Date') == "one":
             def sortFunc(e):
                 return e.published
             filtered_results.sort(key=sortFunc, reverse = True)
+        
         i = 0
+
+        #needed for pagination
         pageCounter = 1
-        resultBuilder = ""
         pageBuilder = ''
+        
+        resultBuilder = ""
         for result in filtered_results:
             try:
                 result.journal_ref + "test string"
@@ -184,92 +208,97 @@ def filter():
             except:
                 publication = 'arXiv preprint'
             publishdate = result.published.strftime('%d %B, %y')
+
+            #formats the authors of an article for apa citation
             authorstring = ""
             for author in result.authors:
                 authorstring = authorstring + author.name + ", "
             authorstring = authorstring[:-2]
+            new = ' &'
+            authorstring = new.join(authorstring.rsplit(",", 1))
+            apaCitationBuilder = authorstring + " (" + str(result.published.year) + "). " + '"' + result.title + '"' + '. ' + publication
+            apaCitationBuilder = urllib.parse.quote(apaCitationBuilder)
+
+            #formats the authors of an article for mla citation
+            mlaAuthors = ""
+            if len(result.authors) == 1:
+                mlaAuthors = result.authors[0].name
+            if len(result.authors) >= 2:
+                mlaAuthors = result.authors[0].name + ", and " + result.authors[1].name
+            if len(result.authors) >= 3:
+                mlaAuthors = result.authors[0].name + ", et al"
+            mlaCitationBuilder = mlaAuthors + '. "' + result.title + '" ' + publication + " (" + str(result.published.year) + "). "
+            mlaCitationBuilder = urllib.parse.quote(mlaCitationBuilder)
+
+            #html string for the cumulative results of the search to be displayed to the user
             resultBuilder = (resultBuilder + '<div class="card' + " page" + str(pageCounter) + '" style="width: 70%;"><div class="card-body"><h5 class="card-title"><a href="' + 
             result.entry_id + '">' + result.title + '</a></h5><h6 class="card-subtitle mb-2 text-muted">' + authorstring + '</h6><h6 class="card-subtitle mb-2 text-muted">' + publication + '</h6><h6 class="card-subtitle mb-2 text-muted"><right>Date Published: ' + publishdate + 
-            '</right></h6> </div><a href="/addbookmark?id=' + result.entry_id + '" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-bookmark"></span> Bookmark</a></div>')
-            #resultBuilder = resultBuilder + '<p><a href="https://doi.org/' + datatwo[i]['prism:doi'] + '">' + datatwo[i]['dc:title'] + '</a></p>'
+            '</right></h6> </div><a href="/addbookmark?id=' + result.entry_id + '" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-bookmark"></span> Bookmark</a>' + '<a href="/cite?apa=' + apaCitationBuilder + '&mla=' + mlaCitationBuilder + '" type="button" target="_blank" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-bookmark"></span> Cite Article</a>' + '</div>')
+            
             i = i+1
             if (i % 10 == 0):
                 pageBuilder = pageBuilder + '<li class="page-item"><a class="page-link" href="javascript:;" onclick="showPage(' + str(pageCounter) + ')">' + str(pageCounter) + '</a></li>'
                 pageCounter = pageCounter + 1
-                
         if pageCounter == 1:
             pageBuilder = ""
+
+        #load results page
         return render_template("results.html", results=resultBuilder, pages=pageBuilder, maxPageNumber=pageCounter)
+
     return render_template(
         "index.html"
     )        
 
+#This is the subjects filter and it will scrape the articles page to find the subject and will display that to user
 @app.route("/filter1", methods= ['POST', 'GET'])
 def filter1():
     if request.method == "POST":
         global searchResults
         i = 0
+
+        #needed for pagination
         pageCounter = 1
-        resultBuilder = ""
         pageBuilder = ''
-        
+
+        resultBuilder = ""
         for result in searchResults.results():
             try:
-            
                 result.journal_ref + "test string"
                 publication = result.journal_ref
             except:
                 publication = 'arXiv preprint'
             publishdate = result.published.strftime('%d %B, %y')
+
+            #formats authors for the article to be displayed
             authorstring = ""
             for author in result.authors:
                 authorstring = authorstring + author.name + ", "
             authorstring = authorstring[:-2]
+
             #Loops through the URLS and webscrapes all subjects, takes a good minunte for it to happen
             page=requests.get(result.entry_id)
             soup=BeautifulSoup(page.text,"html.parser")
             quotes=soup.find("span",attrs={"class" : "primary-subject"})
 
+            #html string for the cumulative results of the search to be displayed to the user
             resultBuilder = (resultBuilder + '<div class="card' + " page" + str(pageCounter) +'" style="width: 70%;"><div class="card-body"><h5 class="card-title"><a href="' + 
             result.entry_id + '">' + result.title + '</a></h5><h6 class="card-subtitle mb-2 text-muted">' + authorstring + '</h6><h6 class="card-subtitle mb-2 text-muted">' + publication + '</h6><h6 class="card-subtitle mb-2 text-muted"><right>Date Published: ' + publishdate + '</right></h6>' + '<h6 class="card-subtitle mb-2 text-muted"><right>Subject: '+ str(quotes.text) +
             '</right></h6> </div><a href="/addbookmark?id=' + result.entry_id + '" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-bookmark"></span> Bookmark</a></div>') 
-            #resultBuilder = resultBuilder + '<p><a href="https://doi.org/' + datatwo[i]['prism:doi'] + '">' + datatwo[i]['dc:title'] + '</a></p>'
+
             i = i+1
             if (i % 10 == 0):
                 pageBuilder = pageBuilder + '<li class="page-item"><a class="page-link" href="javascript:;" onclick="showPage(' + str(pageCounter) + ')">' + str(pageCounter) + '</a></li>'
                 pageCounter = pageCounter + 1
-                
         if pageCounter == 1:
             pageBuilder = ""
-            
+        
+        #load results page
         return render_template("results.html", results=resultBuilder, pages=pageBuilder, maxPageNumber=pageCounter)
     return render_template(
         "index.html"
     )
 
-
-@app.route('/search', methods = ['POST', 'GET'])
-def searchFuture():
-    #not using this code rn
-   if request.method == 'POST':
-      try:
-        #cant figure out how to get searchvalue from form passed into this searchVal variable so i hard coded it to tzit no matter .
-        #what was inputted to the search box There are test records in publications and 2 of them have the word tzit somewhere in the title
-        #searchVal = request.form['search']
-        searchVal = request.form['search']
-        con = sqlite3.connect("Users.db")
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
-        cur.execute("SELECT * FROM publications WHERE title LIKE ?;", ("%"+searchVal+"%",))
-        rows = cur.fetchall(); 
-        return render_template("results.html", rows = rows)
-      except:
-         #redirect to home?
-         print("there was an oopsy")
-         return render_template("index.html")
-      
-
-'''start of login/signup'''
+#start of login/signup
 @app.route("/login")
 def login():
     return render_template(
@@ -321,7 +350,7 @@ def Signin():
                 session['logged_in'] = True
                 return redirect(url_for('index'))
     return redirect(url_for('login'))
-'''end of Login/Signup'''
+#end of Login/Signup
         
 @app.route('/logout')
 def logout():
@@ -330,7 +359,7 @@ def logout():
     return redirect(url_for('index'))
 
 
-'''start of Topics page'''
+#start of Topics page
 @app.route('/Topics' , methods=['GET','POST'])
 def Topics():
         string.ascii_letters
@@ -342,8 +371,7 @@ def Topics():
                 max_results = 3
         )
 
-
-        #---Area for random articles
+        #Area for random articles
         print("test")
         authorstring = ""
         resultBuilder = "<br><h2 class='container-md'>Recently Published Articles to Explore</h2>"
@@ -359,7 +387,7 @@ def Topics():
             result.entry_id + '">' + result.title + '</a></h5><h6 class="card-subtitle mb-2 text-muted">' + '</a></h5><h6 class="card-subtitle mb-2 text-muted"> AUTHORS: ' + authorstring + '</h6><h6 class="card-subtitle mb-2 text-muted">' + 
             '</right></h6> </div></div>')
         
-        #---Area for Science articles
+        #Area for Science articles
         authorstringScience = ""
         resultBuilder = resultBuilder + "<br><h2 class='container-md'>Recent Topics to Explore in SCIENCE</h2>"   
         searchScience = arxiv.Search (
@@ -377,7 +405,8 @@ def Topics():
 
             resultBuilder = (resultBuilder + '<div class="card' + " page" + '" style="width: 70%;"><div class="card-body"><h5 class="card-title"><a href="' + 
             result.entry_id + '">' + result.title + '</a></h5><h6 class="card-subtitle mb-2 text-muted">' + '</a></h5><h6 class="card-subtitle mb-2 text-muted"> AUTHORS: ' + authorstringScience + '</right></h6> </div></div>')
-        #---Area for Technology
+
+        #Area for Technology
         authorstringTechnology = ""
         resultBuilder = resultBuilder + "<br><h2 class='container-md'>Recent Topics to explore in TECHNOLOGY</h2>"  
         searchTechnology = arxiv.Search (
@@ -395,19 +424,11 @@ def Topics():
 
             resultBuilder = (resultBuilder + '<div class="card' + " page" + '" style="width: 70%;"><div class="card-body"><h5 class="card-title"><a href="' + 
             result.entry_id + '">' + result.title + '</a></h5><h6 class="card-subtitle mb-2 text-muted">' + '</a></h5><h6 class="card-subtitle mb-2 text-muted"> AUTHORS: ' + authorstringTechnology   + '</right></h6> </div></div>')
-       
-
-
-
-
         print(resultBuilder)
         return render_template("Topics.html", search=search, results=resultBuilder)
-        #return resultBuilder
+#end of topics page
 
-            
-
-
-'''bookmark page'''
+#bookmark page
 @app.route("/addbookmark")
 def addBookmark():
     if request.method == 'GET':
@@ -425,6 +446,7 @@ def addBookmark():
         conn.close()
     return redirect("/bookmarks")
 
+#displays bookmarks
 @app.route("/bookmarks")
 def bookmark():
     conn = sqlite3.connect("Users.db")
@@ -442,23 +464,34 @@ def bookmark():
     conn.close()
     return render_template("bookmarks.html",bookmark = temp)
 
-'''end of Topics page'''
+#displays an individual researcher's page with their works 
 @app.route("/researchers")
 def research():
+
+    #arguments are passed inside the href string from the researcher_search method
     args = request.args
     args = args.to_dict()
     researcherName = args.get('name')
     researcherInstitution = args.get('institution-name')
     orcid = args.get('orcid-id')
+
     resultBuilder = ""
+
+    #needed for pagination
     pageBuilder = ''
     pageCounter = 1
+
     i = 0
     noArticles = ""
     orcidURL = "https://pub.orcid.org/v3.0/" + orcid + "/works"
+
+    #api request for all of that researcher's works
     r=requests.get(orcidURL, params={}, headers={"Accept":"application/json"})
+
     data = json.loads(r.content)
     for research in data['group']:
+
+        #tries to extract article data from the api results
         articleTitle = research['work-summary'][0]['title']['title']['value']
         try:
             journalTitle = research['work-summary'][0]['journal-title']['value']
@@ -482,9 +515,12 @@ def research():
             articleURL = articleTitle
         else:
             articleURL = '<a href="' + articleURL + '">' + articleTitle + '</a>'
+
+        #html string for the cumulative results of the researcher api request to be displayed to the user
         resultBuilder = (resultBuilder + '<div class="card' + " page" + str(pageCounter) + '" style="width: 70%;"><div class="card-body"><h5 class="card-title">' + articleURL 
         + '</h5></h6><h6 class="card-subtitle mb-2 text-muted">' + journalTitle + '</h6><h6 class="card-subtitle mb-2 text-muted"><right>Date Published: ' + publishDate + 
             '</right></h6> </div></div>')
+
         i = i + 1
         if (i % 10 == 0):
             pageBuilder = pageBuilder + '<li class="page-item"><a class="page-link" href="javascript:;" onclick="showPage(' + str(pageCounter) + ')">' + str(pageCounter) + '</a></li>'
@@ -493,6 +529,8 @@ def research():
             pageBuilder = ""
     if resultBuilder == "":
         noArticles = '1'
+
+    #loads the researcher's page
     return render_template(
         "research.html", researcherName = researcherName, researcherInstitution = researcherInstitution, results=resultBuilder, pages=pageBuilder, maxPageNumber=pageCounter, noArticles=noArticles
     )
