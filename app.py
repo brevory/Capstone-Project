@@ -14,46 +14,43 @@ from bs4 import BeautifulSoup
 import urllib
 import base64
 
+
 app = Flask(__name__)
+
+#global search results that needs to be accessed by filters
 datatwo = Any
 searchResults = Any
-directAPI = "682084898b02a949777e0b81f9943e3d"
 
 
 @app.route("/")
 def home():
     return redirect("index", code=302)
 
-@app.route("/hello/")
-@app.route("/hello/<name>")
-def hello_there(name = None):
-    return render_template(
-        "testtemp.html",
-        name=name
-    )
 
-@app.route("/testarea")
-def testTemp():
-    return render_template(
-        "index.html"
-    )
-
+#User enters their search posts to /index to return relevant articles
 @app.route("/index", methods= ['POST', 'GET'])
 def index():
     if request.method == "POST":
         global searchResults
         search = request.form['search']
+
+        #format for multiple word request for arxiv api
         search = search.replace(" ", " AND ")
-        print(search)
+
         resultBuilder = ""
+
+        #needed for pagination
         pageBuilder = ''
-        i = 0
         pageCounter = 1
-        authorCounter = 0
+
+        i = 0
+
+        #arxiv api request
         searchResults = arxiv.Search (
                 query = search,
                 max_results = 100
         )
+
         for result in searchResults.results():
             try:
                 result.journal_ref + "test string"
@@ -61,6 +58,8 @@ def index():
             except:
                 publication = 'arXiv preprint'
             publishdate = result.published.strftime('%d %B, %y')
+
+            #formats the authors of an article for apa citation
             authorstring = ""
             for author in result.authors:
                 authorstring = authorstring + author.name + ", "
@@ -69,6 +68,8 @@ def index():
             authorstring = new.join(authorstring.rsplit(",", 1))
             apaCitationBuilder = authorstring + " (" + str(result.published.year) + "). " + '"' + result.title + '"' + '. ' + publication
             apaCitationBuilder = urllib.parse.quote(apaCitationBuilder)
+
+            #formats the authors of an article for mla citation
             mlaAuthors = ""
             if len(result.authors) == 1:
                 mlaAuthors = result.authors[0].name
@@ -78,10 +79,12 @@ def index():
                 mlaAuthors = result.authors[0].name + ", et al"
             mlaCitationBuilder = mlaAuthors + '. "' + result.title + '" ' + publication + " (" + str(result.published.year) + "). "
             mlaCitationBuilder = urllib.parse.quote(mlaCitationBuilder)
+
+            #html string for the cumulative results of the search to be displayed to the user
             resultBuilder = (resultBuilder + '<div class="card' + " page" + str(pageCounter) + '" style="width: 70%;"><div class="card-body"><h5 class="card-title"><a href="' + 
             result.entry_id + '">' + result.title + '</a></h5><h6 class="card-subtitle mb-2 text-muted">' + authorstring + '</h6><h6 class="card-subtitle mb-2 text-muted">' + publication + '</h6><h6 class="card-subtitle mb-2 text-muted"><right>Date Published: ' + publishdate + 
             '</right></h6> </div><a href="/addbookmark?id=' + result.entry_id + '" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-bookmark"></span> Bookmark</a>' + '<a href="/cite?apa=' + apaCitationBuilder + '&mla=' + mlaCitationBuilder + '" type="button" target="_blank" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-bookmark"></span> Cite Article</a>' + '</div>')
-            #resultBuilder = resultBuilder + '<p><a href="https://doi.org/' + datatwo[i]['prism:doi'] + '">' + datatwo[i]['dc:title'] + '</a></p>'
+            
             i = i+1
             if (i % 10 == 0):
                 pageBuilder = pageBuilder + '<li class="page-item"><a class="page-link" href="javascript:;" onclick="showPage(' + str(pageCounter) + ')">' + str(pageCounter) + '</a></li>'
@@ -89,22 +92,34 @@ def index():
                 
         if pageCounter == 1:
             pageBuilder = ""
+
+        #load results page
         return render_template("results.html", search=request.form['search'], results=resultBuilder, pages=pageBuilder, maxPageNumber=pageCounter)
+
     return render_template(
         "index.html"
     )
 
+#User enters the name of their desired researcher into the researcher search to return list of researchers
 @app.route("/researcher-search", methods = ['POST','GET'])
 def researcher_search():
     if request.method == 'POST':
         search = request.form['search']
         resultBuilder = ""
+
+        #needed for pagination
         pageBuilder = ''
         pageCounter = 1
+
         i = 0
+
+        #api request
         r = requests.get("https://pub.orcid.org/v3.0/expanded-search/", params={"q":search,"rows":"100"}, headers={"Accept":"application/json"})
+
+
         data = json.loads(r.content)
         for researcher in data['expanded-result']:
+            
             #if statement is needed because not all researchers are active and some appraently don't have name in the orcid database
             if (researcher['institution-name'] and researcher['given-names'] and researcher['family-names'] ):
                 fullName = researcher['given-names'] + " " + researcher['family-names']
